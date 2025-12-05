@@ -1,10 +1,9 @@
-import { createPublicClient, http } from "viem";
+import { createPublicClient, http, encodeFunctionData, erc20Abi } from "viem";
 import {
   OperationType,
   SafeTransaction,
 } from "@polymarket/builder-relayer-client";
 import { polygon } from "viem/chains";
-import { Interface } from "ethers/lib/utils";
 import {
   USDC_E_CONTRACT_ADDRESS,
   CTF_CONTRACT_ADDRESS,
@@ -17,50 +16,17 @@ import { POLYGON_RPC_URL } from "@/constants/polymarket";
 const MAX_UINT256 =
   "115792089237316195423570985008687907853269984665640564039457584007913129639935";
 
-const erc20Interface = new Interface([
+const erc1155Abi = [
   {
-    constant: false,
     inputs: [
-      { name: "_spender", type: "address" },
-      { name: "_value", type: "uint256" },
-    ],
-    name: "approve",
-    outputs: [{ name: "", type: "bool" }],
-    payable: false,
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-]);
-
-const erc1155Interface = new Interface([
-  {
-    constant: false,
-    inputs: [
-      { name: "_operator", type: "address" },
-      { name: "_approved", type: "bool" },
+      { name: "operator", type: "address" },
+      { name: "approved", type: "bool" },
     ],
     name: "setApprovalForAll",
     outputs: [],
-    payable: false,
     stateMutability: "nonpayable",
     type: "function",
   },
-]);
-
-const ERC20_ABI = [
-  {
-    inputs: [
-      { name: "owner", type: "address" },
-      { name: "spender", type: "address" },
-    ],
-    name: "allowance",
-    outputs: [{ name: "", type: "uint256" }],
-    stateMutability: "view",
-    type: "function",
-  },
-] as const;
-
-const ERC1155_ABI = [
   {
     inputs: [
       { name: "account", type: "address" },
@@ -98,7 +64,7 @@ const checkUSDCApprovalForSpender = async (
   try {
     const allowance = await publicClient.readContract({
       address: USDC_E_CONTRACT_ADDRESS as `0x${string}`,
-      abi: ERC20_ABI,
+      abi: erc20Abi,
       functionName: "allowance",
       args: [safeAddress as `0x${string}`, spender as `0x${string}`],
     });
@@ -118,7 +84,7 @@ const checkERC1155ApprovalForSpender = async (
   try {
     const isApproved = await publicClient.readContract({
       address: CTF_CONTRACT_ADDRESS as `0x${string}`,
-      abi: ERC1155_ABI,
+      abi: erc1155Abi,
       functionName: "isApprovedForAll",
       args: [safeAddress as `0x${string}`, spender as `0x${string}`],
     });
@@ -176,10 +142,11 @@ export const createAllApprovalTxs = (): SafeTransaction[] => {
     safeTxns.push({
       to: USDC_E_CONTRACT_ADDRESS,
       operation: OperationType.Call,
-      data: erc20Interface.encodeFunctionData("approve", [
-        address,
-        MAX_UINT256,
-      ]),
+      data: encodeFunctionData({
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [address as `0x${string}`, BigInt(MAX_UINT256)],
+      }),
       value: "0",
     });
   }
@@ -188,10 +155,11 @@ export const createAllApprovalTxs = (): SafeTransaction[] => {
     safeTxns.push({
       to: CTF_CONTRACT_ADDRESS,
       operation: OperationType.Call,
-      data: erc1155Interface.encodeFunctionData("setApprovalForAll", [
-        address,
-        true,
-      ]),
+      data: encodeFunctionData({
+        abi: erc1155Abi,
+        functionName: "setApprovalForAll",
+        args: [address as `0x${string}`, true],
+      }),
       value: "0",
     });
   }
