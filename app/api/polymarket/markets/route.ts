@@ -7,9 +7,10 @@ export async function GET(request: NextRequest) {
   const limit = searchParams.get("limit") || "10";
 
   try {
-    // Fetch markets sorted by 24 hour volume
+    const fetchLimit = parseInt(limit) * 5;
+
     const response = await fetch(
-      `${GAMMA_API}/markets?limit=${limit}&offset=0&active=true&closed=false&order=volume24hr&ascending=false`,
+      `${GAMMA_API}/markets?limit=${fetchLimit}&offset=0&active=true&closed=false&order=volume24hr&ascending=false`,
       {
         headers: { "Content-Type": "application/json" },
         next: { revalidate: 60 },
@@ -33,22 +34,64 @@ export async function GET(request: NextRequest) {
 
     const validMarkets = markets.filter((market: any) => {
       if (market.events && market.events.length > 0) {
-        const hasEndedEvent = market.events.some((event: any) => 
-          event.ended === true || 
-          event.live === false || 
-          event.finishedTimestamp
+        const hasEndedEvent = market.events.some(
+          (event: any) =>
+            event.ended === true ||
+            event.live === false ||
+            event.finishedTimestamp
         );
         if (hasEndedEvent) return false;
       }
 
       if (market.acceptingOrders === false) return false;
-
       if (!market.clobTokenIds) return false;
+      if (market.outcomePrices) {
+        try {
+          const prices = JSON.parse(market.outcomePrices);
+          const hasTradeablePrice = prices.some((price: string) => {
+            const priceNum = parseFloat(price);
+            return priceNum >= 0.05 && priceNum <= 0.95;
+          });
+          if (!hasTradeablePrice) return false;
+        } catch (e) {
+          return false;
+        }
+      }
+
+      const evergreenTags = [
+        "crypto",
+        "politics",
+        "sports",
+        "technology",
+        "business",
+        "entertainment",
+        "science",
+        "ai",
+        "pop-culture",
+      ];
+
+      const marketTags =
+        market.tags?.map((t: any) => t.slug.toLowerCase()) || [];
+      const hasEvergreenTag = evergreenTags.some((tag) =>
+        marketTags.includes(tag)
+      );
+
+      const liquidity = parseFloat(market.liquidity || "0");
+      if (!hasEvergreenTag && liquidity < 5000) return false;
+      if (liquidity < 1000) return false;
 
       return true;
     });
 
-    const limitedMarkets = validMarkets.slice(0, parseInt(limit));
+    const sortedMarkets = validMarkets.sort((a: any, b: any) => {
+      const aScore =
+        parseFloat(a.liquidity || "0") + parseFloat(a.volume || "0");
+      const bScore =
+        parseFloat(b.liquidity || "0") + parseFloat(b.volume || "0");
+      return bScore - aScore;
+    });
+
+    const limitedMarkets = sortedMarkets.slice(0, parseInt(limit));
 
     return NextResponse.json(limitedMarkets);
   } catch (error) {

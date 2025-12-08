@@ -1,13 +1,17 @@
 "use client";
 
+import { useState } from "react";
 import { useWallet } from "@/providers/WalletContext";
 import useSafeDeployment from "@/hooks/useSafeDeployment";
 import usePolygonBalances from "@/hooks/usePolygonBalances";
 
 import Card from "@/components/shared/Card";
 import Badge from "@/components/shared/Badge";
+import TransferModal from "@/components/PolygonAssets/TransferModal";
 
 export default function PolygonAssets() {
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+
   const { eoaAddress } = useWallet();
   const { derivedSafeAddressFromEoa } = useSafeDeployment(eoaAddress);
   const { formattedUsdcBalance, isLoading, isError } = usePolygonBalances(
@@ -40,6 +44,12 @@ export default function PolygonAssets() {
     <Card className="p-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-2xl font-bold">Trading Balance</h2>
+        <button
+          onClick={() => setIsTransferModalOpen(true)}
+          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+        >
+          Send
+        </button>
       </div>
 
       <div className="bg-white/5 rounded-lg p-6 text-center">
@@ -50,6 +60,11 @@ export default function PolygonAssets() {
 
         <p className="text-5xl font-bold">${formattedUsdcBalance}</p>
       </div>
+
+      <TransferModal
+        isOpen={isTransferModalOpen}
+        onClose={() => setIsTransferModalOpen(false)}
+      />
     </Card>
   );
 }
