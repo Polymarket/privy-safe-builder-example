@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTrading } from "@/providers/TradingProvider";
 import { Side } from "@polymarket/clob-client";
+import type { CategoryId } from "@/constants/categories";
+import { getCategoryById } from "@/constants/categories";
 
 export type PolymarketMarket = {
   id: string;
@@ -23,6 +25,11 @@ export type PolymarketMarket = {
   endDateIso?: string;
   gameStartTime?: string;
   events?: any[];
+  eventTitle?: string;
+  eventSlug?: string;
+  eventId?: string;
+  eventIcon?: string;
+  negRisk?: boolean;
   realtimePrices?: Record<
     string,
     {
@@ -35,13 +42,26 @@ export type PolymarketMarket = {
   [key: string]: any;
 };
 
-export default function useHighVolumeMarkets(limit: number = 10) {
+interface UseMarketsOptions {
+  limit?: number;
+  categoryId?: CategoryId;
+}
+
+export default function useMarkets(options: UseMarketsOptions = {}) {
+  const { limit = 10, categoryId = "trending" } = options;
   const { clobClient } = useTrading();
 
   return useQuery({
-    queryKey: ["high-volume-markets", limit, !!clobClient],
+    queryKey: ["high-volume-markets", limit, categoryId, !!clobClient],
     queryFn: async (): Promise<PolymarketMarket[]> => {
-      const response = await fetch(`/api/polymarket/markets?limit=${limit}`);
+      const category = getCategoryById(categoryId);
+      let url = `/api/polymarket/markets?limit=${limit}`;
+
+      if (category?.tagId) {
+        url += `&tag_id=${category.tagId}`;
+      }
+
+      const response = await fetch(url);
 
       if (!response.ok) {
         throw new Error("Failed to fetch markets");
@@ -49,6 +69,7 @@ export default function useHighVolumeMarkets(limit: number = 10) {
 
       const markets: PolymarketMarket[] = await response.json();
 
+      // Fetch realtime prices from CLOB if client is available
       if (clobClient) {
         await Promise.all(
           markets.map(async (market) => {
