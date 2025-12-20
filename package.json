@@ -1,5 +1,5 @@
 {
-  "name": "polymarket-privy-eoa",
+  "name": "polymarket-privy-safe",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -13,9 +13,12 @@
     "@polymarket/builder-signing-sdk": "^0.0.8",
     "@polymarket/clob-client": "^4.22.8",
     "@privy-io/react-auth": "^3.8.1",
+    "@solana-program/system": "^0.10.0",
+    "@solana-program/token": "^0.9.0",
+    "@solana/kit": "^5.1.0",
     "@tanstack/react-query": "^5.90.10",
     "ethers": "^5.8.0",
-    "next": "16.0.3",
+    "next": "^16.0.10",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "viem": "^2.39.2"
