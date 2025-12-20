@@ -203,9 +203,13 @@ export async function POST(request: NextRequest) {
 
 **Why remote signing?**
 
-- Builder credentials never exposed to client
+- Builder secret never exposed to client
 - Secure HMAC signature generation
 - Required for builder order attribution (with ClobClient) or authentication (RelayClient)
+
+> **Security Note:** This reference implementation exposes builder credentials (API key + passphrase) to the client via the `/api/polymarket/sign` endpoint. For production deployments, implement one of:
+> - **Proxy pattern** - Server makes all CLOB/Relay requests, credentials never reach client
+> - **Auth token validation** - Require authenticated session before returning credentials
 
 ---
 
@@ -629,7 +633,7 @@ POLYMARKET_BUILDER_PASSPHRASE=your_builder_passphrase
 | [`viem`](https://viem.sh/)                                                                               | ^2.39.2  | Ethereum interactions, RPC calls                 |
 | [`ethers`](https://docs.ethers.org/v5/)                                                                  | ^5.8.0   | Wallet signing, EIP-712 messages                 |
 | [`@tanstack/react-query`](https://tanstack.com/query)                                                    | ^5.90.10 | Server state management                          |
-| [`next`](https://nextjs.org/)                                                                            | 16.0.3   | React framework, API routes                      |
+| [`next`](https://nextjs.org/)                                                                            | ^16.0.10 | React framework, API routes                      |
 
 ---
 
