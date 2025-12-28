@@ -1,6 +1,7 @@
 "use client";
 
 import useClobOrder from "@/hooks/useClobOrder";
+import useTickSize from "@/hooks/useTickSize";
 import { useState, useEffect, useRef } from "react";
 import { useWallet } from "@/providers/WalletContext";
 
@@ -11,10 +12,24 @@ import OrderTypeToggle from "@/components/Trading/OrderModal/OrderTypeToggle";
 
 import { cn } from "@/utils/classNames";
 import { SUCCESS_STYLES } from "@/constants/ui";
-import { convertCentsToPrice } from "@/utils/order";
 import { MIN_ORDER_SIZE } from "@/constants/validation";
 import type { ClobClient } from "@polymarket/clob-client";
-import { isValidSize, isValidPriceCents } from "@/utils/validation";
+import { isValidSize } from "@/utils/validation";
+
+function getDecimalPlaces(tickSize: number): number {
+  if (tickSize >= 1) return 0;
+  const str = tickSize.toString();
+  const decimalPart = str.split(".")[1];
+  return decimalPart ? decimalPart.length : 0;
+}
+
+function isValidTickPrice(price: number, tickSize: number): boolean {
+  if (tickSize <= 0) return false;
+  const multiplier = Math.round(price / tickSize);
+  const expectedPrice = multiplier * tickSize;
+  // Allow small floating point tolerance
+  return Math.abs(price - expectedPrice) < 1e-10;
+}
 
 type OrderPlacementModalProps = {
   isOpen: boolean;
@@ -46,6 +61,12 @@ export default function OrderPlacementModal({
   const { eoaAddress } = useWallet();
 
   const modalRef = useRef<HTMLDivElement>(null);
+
+  // Fetch tick size dynamically for this market
+  const { tickSize, isLoading: isLoadingTickSize } = useTickSize(
+    isOpen ? tokenId : null
+  );
+  const decimalPlaces = getDecimalPlaces(tickSize);
 
   const {
     submitOrder,
@@ -100,9 +121,7 @@ export default function OrderPlacementModal({
   if (!isOpen) return null;
 
   const sizeNum = parseFloat(size) || 0;
-  const limitPriceNum = limitPrice
-    ? convertCentsToPrice(parseInt(limitPrice))
-    : 0;
+  const limitPriceNum = parseFloat(limitPrice) || 0;
   const effectivePrice = orderType === "limit" ? limitPriceNum : currentPrice;
 
   const handlePlaceOrder = async () => {
@@ -112,15 +131,20 @@ export default function OrderPlacementModal({
     }
 
     if (orderType === "limit") {
-      if (!limitPrice) {
+      if (!limitPrice || limitPriceNum <= 0) {
         setLocalError("Limit price is required");
         return;
       }
 
-      const cents = parseInt(limitPrice);
+      if (limitPriceNum < tickSize || limitPriceNum > 1 - tickSize) {
+        setLocalError(
+          `Price must be between $${tickSize.toFixed(decimalPlaces)} and $${(1 - tickSize).toFixed(decimalPlaces)}`
+        );
+        return;
+      }
 
-      if (!isValidPriceCents(cents)) {
-        setLocalError("Price must be between 1 and 99 (0.01 to 0.99)");
+      if (!isValidTickPrice(limitPriceNum, tickSize)) {
+        setLocalError(`Price must be a multiple of tick size ($${tickSize})`);
         return;
       }
     }
@@ -211,6 +235,9 @@ export default function OrderPlacementModal({
             orderType={orderType}
             currentPrice={currentPrice}
             isSubmitting={isSubmitting}
+            tickSize={tickSize}
+            decimalPlaces={decimalPlaces}
+            isLoadingTickSize={isLoadingTickSize}
           />
 
           {/* Order Summary */}
