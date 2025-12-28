@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Side, OrderType } from "@polymarket/clob-client";
-import type { ClobClient, UserOrder } from "@polymarket/clob-client";
+import type { ClobClient, UserOrder, UserMarketOrder } from "@polymarket/clob-client";
 
 export type OrderParams = {
   tokenId: string;
@@ -39,49 +39,44 @@ export default function useClobOrder(
         let response;
 
         if (params.isMarketOrder) {
-          let aggressivePrice: number;
+          // For market orders, use createAndPostMarketOrder with FOK
+          // BUY orders need amount in dollars (size * askPrice)
+          // SELL orders need amount in shares
+          let marketAmount: number;
 
-          try {
-            const priceFromOrderbook = await clobClient.getPrice(
+          if (side === Side.BUY) {
+            // Get the ask price (price to buy at)
+            const priceResponse = await clobClient.getPrice(
               params.tokenId,
-              side
+              Side.SELL // Get sell side price = ask price for buyers
             );
+            const askPrice = parseFloat(priceResponse.price);
 
-            const marketPrice = parseFloat(priceFromOrderbook.price);
-
-            if (isNaN(marketPrice) || marketPrice <= 0 || marketPrice >= 1) {
-              throw new Error("Invalid price from orderbook");
+            if (isNaN(askPrice) || askPrice <= 0 || askPrice >= 1) {
+              throw new Error("Unable to get valid market price");
             }
 
-            if (params.side === "BUY") {
-              aggressivePrice = Math.min(0.99, marketPrice * 1.05);
-            } else {
-              aggressivePrice = Math.max(0.01, marketPrice * 0.95);
-            }
-          } catch (e) {
-            aggressivePrice = params.side === "BUY" ? 0.99 : 0.01;
-            console.warn(
-              `Cannot get market price, using fallback: ${aggressivePrice}. Error:`,
-              e instanceof Error ? e.message : "Unknown"
-            );
+            // Convert shares to dollar amount for BUY orders
+            marketAmount = params.size * askPrice;
+          } else {
+            // For SELL orders, amount is in shares
+            marketAmount = params.size;
           }
 
-          const limitOrder: UserOrder = {
+          const marketOrder: UserMarketOrder = {
             tokenID: params.tokenId,
-            price: aggressivePrice,
-            size: params.size,
+            amount: marketAmount,
             side,
             feeRateBps: 0,
-            expiration: 0,
-            taker: "0x0000000000000000000000000000000000000000",
           };
 
-          response = await clobClient.createAndPostOrder(
-            limitOrder,
+          response = await clobClient.createAndPostMarketOrder(
+            marketOrder,
             { negRisk: params.negRisk },
-            OrderType.GTC
+            OrderType.FOK // Fill or Kill for market orders
           );
         } else {
+          // For limit orders, use createAndPostOrder with GTC
           if (!params.price) {
             throw new Error("Price required for limit orders");
           }
@@ -99,7 +94,7 @@ export default function useClobOrder(
           response = await clobClient.createAndPostOrder(
             limitOrder,
             { negRisk: params.negRisk },
-            OrderType.GTC
+            OrderType.GTC // Good Till Cancelled for limit orders
           );
         }
 
@@ -111,7 +106,7 @@ export default function useClobOrder(
         } else {
           throw new Error("Order submission failed");
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         const error =
           err instanceof Error ? err : new Error("Failed to submit order");
         setError(error);
@@ -136,7 +131,7 @@ export default function useClobOrder(
         await clobClient.cancelOrder({ orderID: orderId });
         queryClient.invalidateQueries({ queryKey: ["active-orders"] });
         return { success: true };
-      } catch (err: any) {
+      } catch (err: unknown) {
         const error =
           err instanceof Error ? err : new Error("Failed to cancel order");
         setError(error);
