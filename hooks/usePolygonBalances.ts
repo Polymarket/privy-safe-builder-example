@@ -12,7 +12,7 @@ export default function usePolygonBalances(address: string | undefined) {
     isLoading,
     error,
   } = useQuery({
-    queryKey: ["usdcBalance", address],
+    queryKey: ["polygon-balances", address],
     queryFn: async () => {
       if (!address || !publicClient) return null;
 
